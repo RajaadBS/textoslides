@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TextToSlides - AI-Powered Text to PowerPoint Generator</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="app-header">
+        <div class="container">
+            <div class="d-flex align-items-center justify-content-between py-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="app-logo">
+                        <i class="bi bi-file-earmark-slides"></i>
+                    </div>
+                    <div>
+                        <h1 class="app-title mb-0">TextToSlides</h1>
+                        <p class="app-subtitle mb-0">Your Text, Your Style – Auto-Generate Presentations</p>
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <a href="https://github.com/RajaadBS/textoslides" target="_blank" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-github"></i> View on GitHub
+                    </a>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Application -->
+    <main class="app-main">
+        <div class="container">
+            <!-- Progress Steps -->
+            <div class="progress-steps mb-4">
+                <div class="step active" data-step="1">
+                    <div class="step-icon"><i class="bi bi-file-text"></i></div>
+                    <div class="step-label">Input Text</div>
+                </div>
+                <div class="step" data-step="2">
+                    <div class="step-icon"><i class="bi bi-gear"></i></div>
+                    <div class="step-label">Configure AI</div>
+                </div>
+                <div class="step" data-step="3">
+                    <div class="step-icon"><i class="bi bi-upload"></i></div>
+                    <div class="step-label">Upload Template</div>
+                </div>
+                <div class="step" data-step="4">
+                    <div class="step-icon"><i class="bi bi-download"></i></div>
+                    <div class="step-label">Generate & Download</div>
+                </div>
+            </div>
+
+            <!-- Step 1: Text Input -->
+            <div id="step-1" class="step-content">
+                <div class="row">
+                    <div class="col-lg-8">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0"><i class="bi bi-file-text me-2"></i>Enter Your Content</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label for="text-input" class="form-label">
+                                        Paste your text, markdown, or long-form content here:
+                                    </label>
+                                    <textarea 
+                                        id="text-input" 
+                                        class="form-control" 
+                                        rows="12" 
+                                        placeholder="Enter your content here...
+
+Example:
+# Company Overview
+Our company has been leading innovation in the tech industry for over a decade.
+
+## Key Achievements
+- Launched 5 successful products
+- Grew revenue by 300% in 3 years
+- Expanded to 15 countries
+
+## Future Goals
+We aim to revolutionize AI-powered solutions and expand our global presence."></textarea>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="input-stats">
+                                            <small class="text-muted">
+                                                <span id="word-count">0</span> words • 
+                                                <span id="char-count">0</span> characters •
+                                                Estimated <span id="slide-count">0</span> slides
+                                            </small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 text-end">
+                                        <button type="button" class="btn btn-outline-secondary btn-sm me-2" onclick="clearText()">
+                                            <i class="bi bi-trash"></i> Clear
+                                        </button>
+                                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="loadSample()">
+                                            <i class="bi bi-lightning"></i> Load Sample
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="bi bi-lightbulb me-2"></i>Optional Guidance</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label for="guidance-input" class="form-label">
+                                        Specify tone, style, or use case:
+                                    </label>
+                                    <input 
+                                        type="text" 
+                                        id="guidance-input" 
+                                        class="form-control" 
+                                        placeholder="e.g., Turn into an investor pitch deck">
+                                </div>
+                                <div class="guidance-examples">
+                                    <p class="small text-muted mb-2">Popular examples:</p>
+                                    <div class="d-flex flex-wrap gap-1">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary guidance-tag" onclick="setGuidance(this.textContent)">Investor pitch deck</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary guidance-tag" onclick="setGuidance(this.textContent)">Academic presentation</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary guidance-tag" onclick="setGuidance(this.textContent)">Training workshop</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary guidance-tag" onclick="setGuidance(this.textContent)">Executive summary</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary guidance-tag" onclick="setGuidance(this.textContent)">Project proposal</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="card mt-3">
+                            <div class="card-body text-center">
+                                <h6 class="text-success"><i class="bi bi-shield-check me-2"></i>Privacy First</h6>
+                                <p class="small text-muted mb-0">Your content and API keys are never stored or logged. All processing happens securely with your chosen AI provider.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="text-center mt-4">
+                    <button type="button" class="btn btn-primary btn-lg" onclick="nextStep(2)" disabled id="step-1-next">
+                        Continue to AI Configuration <i class="bi bi-arrow-right ms-2"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 2: AI Configuration -->
+            <div id="step-2" class="step-content d-none">
+                <div class="row justify-content-center">
+                    <div class="col-lg-8">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0"><i class="bi bi-cpu me-2"></i>Configure AI Provider</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="llm-provider" class="form-label">AI Provider</label>
+                                        <select id="llm-provider" class="form-select">
+                                            <option value="">Select AI Provider</option>
+                                            <option value="openai">OpenAI (GPT-4, GPT-3.5)</option>
+                                            <option value="anthropic">Anthropic (Claude)</option>
+                                            <option value="gemini">Google Gemini</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="llm-model" class="form-label">Model</label>
+                                        <select id="llm-model" class="form-select" disabled>
+                                            <option value="">Select Model</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="api-key" class="form-label">API Key</label>
+                                    <div class="input-group">
+                                        <input type="password" id="api-key" class="form-control" placeholder="Enter your API key">
+                                        <button class="btn btn-outline-secondary" type="button" onclick="toggleApiKey()">
+                                            <i class="bi bi-eye" id="api-key-toggle"></i>
+                                        </button>
+                                    </div>
+                                    <div class="form-text">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        Your API key is used only for this request and is never stored.
+                                    </div>
+                                </div>
+                                <div class="api-key-help">
+                                    <div class="alert alert-info">
+                                        <h6 class="alert-heading"><i class="bi bi-key me-2"></i>Need an API Key?</h6>
+                                        <div id="api-key-links">
+                                            <!-- Dynamic content based on provider selection -->
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="text-center mt-4">
+                    <button type="button" class="btn btn-secondary me-3" onclick="prevStep(1)">
+                        <i class="bi bi-arrow-left me-2"></i>Back
+                    </button>
+                    <button type="button" class="btn btn-primary btn-lg" onclick="nextStep(3)" disabled id="step-2-next">
+                        Continue to Template Upload <i class="bi bi-arrow-right ms-2"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 3: Template Upload -->
+            <div id="step-3" class="step-content d-none">
+                <div class="row justify-content-center">
+                    <div class="col-lg-8">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0"><i class="bi bi-upload me-2"></i>Upload PowerPoint Template</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="upload-area" id="upload-area">
+                                    <div class="upload-content">
+                                        <i class="bi bi-cloud-upload upload-icon"></i>
+                                        <h6>Drag & Drop your PowerPoint file here</h6>
+                                        <p class="text-muted">or click to browse for files</p>
+                                        <p class="small text-muted mb-0">Supports .pptx and .potx files (max 50MB)</p>
+                                    </div>
+                                    <input type="file" id="template-file" accept=".pptx,.potx" hidden>
+                                </div>
+                                
+                                <div id="template-preview" class="template-preview d-none">
+                                    <div class="d-flex align-items-center">
+                                        <div class="file-icon me-3">
+                                            <i class="bi bi-file-earmark-slides text-primary"></i>
+                                        </div>
+                                        <div class="file-info flex-grow-1">
+                                            <h6 class="mb-1" id="template-name">Template.pptx</h6>
+                                            <p class="text-muted small mb-0" id="template-size">2.5 MB</p>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeTemplate()">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                    <div class="template-analysis mt-3" id="template-analysis">
+                                        <div class="d-flex justify-content-center">
+                                            <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                                            <span>Analyzing template...</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="card mt-3">
+                            <div class="card-body">
+                                <h6><i class="bi bi-palette me-2"></i>Template Style Preservation</h6>
+                                <p class="small text-muted mb-0">Your uploaded template's colors, fonts, layouts, and images will be automatically extracted and applied to the generated slides, ensuring consistent branding and visual identity.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="text-center mt-4">
+                    <button type="button" class="btn btn-secondary me-3" onclick="prevStep(2)">
+                        <i class="bi bi-arrow-left me-2"></i>Back
+                    </button>
+                    <button type="button" class="btn btn-success btn-lg" onclick="generatePresentation()" disabled id="generate-btn">
+                        <i class="bi bi-magic me-2"></i>Generate Presentation
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 4: Processing & Download -->
+            <div id="step-4" class="step-content d-none">
+                <div class="row justify-content-center">
+                    <div class="col-lg-8">
+                        <div class="card">
+                            <div class="card-body text-center">
+                                <div id="processing-status">
+                                    <div class="processing-animation mb-4">
+                                        <div class="spinner-grow text-primary" role="status"></div>
+                                        <div class="spinner-grow text-secondary" role="status"></div>
+                                        <div class="spinner-grow text-success" role="status"></div>
+                                    </div>
+                                    <h5>Creating Your Presentation</h5>
+                                    <p class="text-muted mb-4" id="processing-text">Analyzing your content and applying template styles...</p>
+                                    
+                                    <div class="processing-steps">
+                                        <div class="processing-step" id="step-analyze">
+                                            <i class="bi bi-hourglass-split me-2"></i>
+                                            <span>Analyzing text content...</span>
+                                        </div>
+                                        <div class="processing-step" id="step-structure">
+                                            <i class="bi bi-hourglass-split me-2"></i>
+                                            <span>Generating slide structure...</span>
+                                        </div>
+                                        <div class="processing-step" id="step-template">
+                                            <i class="bi bi-hourglass-split me-2"></i>
+                                            <span>Applying template styles...</span>
+                                        </div>
+                                        <div class="processing-step" id="step-build">
+                                            <i class="bi bi-hourglass-split me-2"></i>
+                                            <span>Building presentation...</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div id="success-status" class="d-none">
+                                    <div class="success-animation mb-4">
+                                        <i class="bi bi-check-circle-fill text-success display-1"></i>
+                                    </div>
+                                    <h5 class="text-success">Presentation Created Successfully!</h5>
+                                    <p class="text-muted mb-4">Your PowerPoint presentation has been generated with your template's styling preserved.</p>
+                                    
+                                    <div class="d-grid gap-2 d-md-flex justify-content-md-center">
+                                        <a href="#" id="download-link" class="btn btn-success btn-lg me-md-2" download>
+                                            <i class="bi bi-download me-2"></i>Download Presentation
+                                        </a>
+                                        <button type="button" class="btn btn-outline-primary" onclick="startOver()">
+                                            <i class="bi bi-arrow-clockwise me-2"></i>Create Another
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div id="error-status" class="d-none">
+                                    <div class="error-animation mb-4">
+                                        <i class="bi bi-exclamation-circle-fill text-danger display-1"></i>
+                                    </div>
+                                    <h5 class="text-danger">Generation Failed</h5>
+                                    <p class="text-muted mb-4" id="error-message">An error occurred while generating your presentation.</p>
+                                    
+                                    <div class="d-grid gap-2 d-md-flex justify-content-md-center">
+                                        <button type="button" class="btn btn-primary me-md-2" onclick="generatePresentation()">
+                                            <i class="bi bi-arrow-clockwise me-2"></i>Try Again
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary" onclick="prevStep(3)">
+                                            <i class="bi bi-arrow-left me-2"></i>Go Back
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer mt-5">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <p class="text-muted small mb-0">
+                        © 2025 TextToSlides. Open source under MIT License.
+                    </p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <a href="https://github.com/RajaadBS/textoslides" class="text-muted small text-decoration-none me-3">
+                        <i class="bi bi-github me-1"></i>GitHub
+                    </a>
+                    <a href="#" class="text-muted small text-decoration-none">
+                        <i class="bi bi-question-circle me-1"></i>Help
+                    </a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
