@@ -55,7 +55,7 @@ app.use(cors({
 // Rate limiting
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: process.env.NODE_ENV === 'production' ? 10 : 100,
+    max: process.env.NODE_ENV === 'production' ? 50 : 100, // Increased limit
     message: 'Too many requests, please try again later.',
     standardHeaders: true,
     legacyHeaders: false,
@@ -92,19 +92,48 @@ const upload = multer({
     }
 });
 
-// LLM Provider Factory
+// Updated LLM Provider Factory with .env fallback
 class LLMProviderFactory {
     static createProvider(providerConfig) {
+        // Use server-side API keys as fallback
+        const apiKey = providerConfig.apiKey || this.getServerApiKey(providerConfig.provider);
+        
+        if (!apiKey) {
+            throw new Error(`No API key available for ${providerConfig.provider}. Please provide an API key or set environment variables.`);
+        }
+
+        const config = {
+            ...providerConfig,
+            apiKey: apiKey
+        };
+
         switch (providerConfig.provider) {
             case 'openai':
-                return new OpenAIProvider(providerConfig);
+                return new OpenAIProvider(config);
             case 'anthropic':
-                return new AnthropicProvider(providerConfig);
+                return new AnthropicProvider(config);
             case 'gemini':
-                return new GeminiProvider(providerConfig);
+                return new GeminiProvider(config);
             default:
                 throw new Error(`Unsupported LLM provider: ${providerConfig.provider}`);
         }
+    }
+
+    static getServerApiKey(provider) {
+        switch (provider) {
+            case 'openai':
+                return process.env.OPENAI_API_KEY;
+            case 'anthropic':
+                return process.env.ANTHROPIC_API_KEY;
+            case 'gemini':
+                return process.env.GEMINI_API_KEY;
+            default:
+                return null;
+        }
+    }
+
+    static hasServerApiKey(provider) {
+        return !!this.getServerApiKey(provider);
     }
 }
 
@@ -203,7 +232,7 @@ class AnthropicProvider {
 <text>${text}</text>
 <guidance>${guidance}</guidance>
 
-Return structured JSON analysis for slide generation.`;
+Return structured JSON analysis for slide generation with title, themes, keyPoints, slideCount, and structure.`;
 
         try {
             const response = await this.client.messages.create({
@@ -225,7 +254,7 @@ Return structured JSON analysis for slide generation.`;
 <analysis>${JSON.stringify(analysis)}</analysis>
 <guidance>${guidance}</guidance>
 
-Return detailed slide structure as JSON.`;
+Return detailed slide structure as JSON with totalSlides and slides array.`;
 
         try {
             const response = await this.client.messages.create({
@@ -252,7 +281,7 @@ class GeminiProvider {
     }
 
     async analyzeText(text, guidance = '') {
-        const prompt = `Analyze for presentation: ${text}\nGuidance: ${guidance}\n\nReturn JSON analysis.`;
+        const prompt = `Analyze for presentation: ${text}\nGuidance: ${guidance}\n\nReturn JSON analysis with title, themes, keyPoints, slideCount, structure.`;
 
         try {
             const result = await this.model.generateContent(prompt);
@@ -265,7 +294,7 @@ class GeminiProvider {
     }
 
     async generateSlideStructure(analysis, guidance = '') {
-        const prompt = `Create slides from: ${JSON.stringify(analysis)}\nGuidance: ${guidance}\n\nReturn slide JSON.`;
+        const prompt = `Create slides from: ${JSON.stringify(analysis)}\nGuidance: ${guidance}\n\nReturn slide JSON with totalSlides and slides array.`;
 
         try {
             const result = await this.model.generateContent(prompt);
@@ -311,7 +340,7 @@ class TemplateAnalyzer {
                 name.startsWith('ppt/slideLayouts/') && name.endsWith('.xml')
             );
             
-            for (const layoutFile of layoutFiles.slice(0, 5)) { // Limit to 5 layouts
+            for (const layoutFile of layoutFiles.slice(0, 5)) {
                 const layoutXml = await zip.file(layoutFile).async('string');
                 layouts.push({
                     name: layoutFile.split('/').pop().replace('.xml', ''),
@@ -347,7 +376,6 @@ class TemplateAnalyzer {
     }
 
     parseTheme(themeXml) {
-        // Basic theme parsing
         return {
             colorScheme: {
                 primary: '#1f497d',
@@ -581,6 +609,21 @@ app.get('/api/health', (req, res) => {
     });
 });
 
+// Check server API key availability
+app.get('/api/server-keys', (req, res) => {
+    const availableKeys = {
+        openai: LLMProviderFactory.hasServerApiKey('openai'),
+        anthropic: LLMProviderFactory.hasServerApiKey('anthropic'),
+        gemini: LLMProviderFactory.hasServerApiKey('gemini')
+    };
+
+    res.json({
+        success: true,
+        serverKeysAvailable: availableKeys,
+        hasAnyKey: Object.values(availableKeys).some(Boolean)
+    });
+});
+
 // Root route
 app.get('/', (req, res) => {
     const indexPath = path.join(__dirname, 'public', 'index.html');
@@ -591,6 +634,7 @@ app.get('/', (req, res) => {
             message: 'TextToSlides API is running!',
             endpoints: [
                 'GET /api/health',
+                'GET /api/server-keys',
                 'POST /api/analyze-template',
                 'POST /api/generate-presentation'
             ]
@@ -630,21 +674,20 @@ app.post('/api/generate-presentation', upload.single('template'), async (req, re
     try {
         const { text, guidance, llmProvider, llmModel, apiKey } = req.body;
 
-        // Validate required fields
-        if (!text || !llmProvider || !apiKey || !req.file) {
+        if (!text || !llmProvider || !req.file) {
             return res.status(400).json({ 
                 error: 'Missing required fields',
-                required: ['text', 'llmProvider', 'apiKey', 'template file']
+                required: ['text', 'llmProvider', 'template file']
             });
         }
 
         console.log(`Generating presentation using ${llmProvider} with ${llmModel || 'default model'}`);
 
-        // Initialize LLM provider
+        // Initialize LLM provider (will use server API key as fallback)
         const provider = LLMProviderFactory.createProvider({
             provider: llmProvider,
             model: llmModel,
-            apiKey: apiKey
+            apiKey: apiKey // This can be empty if server has keys
         });
 
         // Step 1: Analyze text
@@ -711,7 +754,8 @@ app.use('*', (req, res) => {
         path: req.originalUrl,
         available_endpoints: [
             'GET /',
-            'GET /api/health', 
+            'GET /api/health',
+            'GET /api/server-keys', 
             'POST /api/analyze-template',
             'POST /api/generate-presentation'
         ]
@@ -724,8 +768,17 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`🌐 Available endpoints:`);
     console.log(`   - GET /api/health`);
+    console.log(`   - GET /api/server-keys`);
     console.log(`   - POST /api/analyze-template`);
     console.log(`   - POST /api/generate-presentation`);
+    
+    // Log server API key status
+    const keyStatus = {
+        openai: !!process.env.OPENAI_API_KEY,
+        anthropic: !!process.env.ANTHROPIC_API_KEY,
+        gemini: !!process.env.GEMINI_API_KEY
+    };
+    console.log(`🔑 Server API keys configured:`, keyStatus);
 });
 
 // Graceful shutdown
