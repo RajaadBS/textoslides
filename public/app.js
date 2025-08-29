@@ -2,6 +2,7 @@
 class TextToSlidesApp {
     constructor() {
         this.currentStep = 1;
+        this.serverKeys = null; // Will store server API key availability
         this.appData = {
             text: '',
             guidance: '',
@@ -33,9 +34,25 @@ class TextToSlidesApp {
         this.initializeApp();
     }
 
-    initializeApp() {
+    async initializeApp() {
+        await this.checkServerKeys(); // Check what API keys are available on server
         this.setupEventListeners();
         this.updateTextStats();
+    }
+
+    // New method to check server API keys
+    async checkServerKeys() {
+        try {
+            const response = await fetch('/api/server-keys');
+            if (response.ok) {
+                const data = await response.json();
+                this.serverKeys = data.serverKeysAvailable;
+                console.log('Server API keys available:', this.serverKeys);
+            }
+        } catch (error) {
+            console.log('Could not check server keys, will require manual entry');
+            this.serverKeys = { openai: false, anthropic: false, gemini: false };
+        }
     }
 
     setupEventListeners() {
@@ -114,8 +131,9 @@ class TextToSlidesApp {
         this.appData.text = text;
     }
 
+    // Updated validation for Step 1 - reduced from 100 to 10 characters
     validateStep1() {
-        const isValid = this.appData.text.trim().length >= 100; // Minimum 100 characters
+        const isValid = this.appData.text.trim().length >= 10;
         document.getElementById('step-1-next').disabled = !isValid;
         return isValid;
     }
@@ -189,17 +207,21 @@ With strong market fundamentals, a proven business model, and an experienced tea
         this.validateStep1();
     }
 
-    // Step 2: AI Configuration
+    // Step 2: AI Configuration with server key support
     handleProviderChange(providerId) {
         this.appData.llmProvider = providerId;
         const modelSelect = document.getElementById('llm-model');
         const apiKeyLinks = document.getElementById('api-key-links');
+        const apiKeyInput = document.getElementById('api-key');
+        const apiKeyGroup = apiKeyInput.closest('.mb-3');
         
         // Update model options
         modelSelect.innerHTML = '<option value="">Select Model</option>';
         
         if (providerId && this.llmProviders[providerId]) {
             const provider = this.llmProviders[providerId];
+            const hasServerKey = this.serverKeys && this.serverKeys[providerId];
+            
             provider.models.forEach(model => {
                 const option = document.createElement('option');
                 option.value = model;
@@ -208,25 +230,55 @@ With strong market fundamentals, a proven business model, and an experienced tea
             });
             modelSelect.disabled = false;
 
-            // Update API key help
-            apiKeyLinks.innerHTML = `
-                <p class="mb-2">Get your ${provider.name} API key:</p>
-                <a href="${provider.keyUrl}" target="_blank" class="btn btn-sm btn-outline-primary">
-                    <i class="bi bi-box-arrow-up-right me-1"></i>Get ${provider.name} API Key
-                </a>
-            `;
+            // If server has API key, hide the API key input and show success message
+            if (hasServerKey) {
+                apiKeyGroup.style.display = 'none';
+                apiKeyLinks.innerHTML = `
+                    <div class="alert alert-success">
+                        <i class="bi bi-check-circle-fill me-2"></i>
+                        <strong>Server API Key Available!</strong><br>
+                        Using ${provider.name} API key from server configuration. No manual key entry needed.
+                    </div>
+                `;
+                // Auto-select first model
+                if (provider.models.length > 0) {
+                    modelSelect.value = provider.models[0];
+                    this.appData.llmModel = provider.models[0];
+                }
+                this.appData.apiKey = 'server-key'; // Placeholder
+            } else {
+                // Show manual API key input
+                apiKeyGroup.style.display = 'block';
+                apiKeyLinks.innerHTML = `
+                    <div class="alert alert-info">
+                        <h6 class="alert-heading">
+                            <i class="bi bi-key me-2"></i>API Key Required
+                        </h6>
+                        <p class="mb-2">Get your ${provider.name} API key:</p>
+                        <a href="${provider.keyUrl}" target="_blank" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-box-arrow-up-right me-1"></i>Get ${provider.name} API Key
+                        </a>
+                    </div>
+                `;
+                this.appData.apiKey = ''; // Reset
+            }
         } else {
             modelSelect.disabled = true;
+            apiKeyGroup.style.display = 'block';
             apiKeyLinks.innerHTML = '<p class="mb-0">Select a provider to see API key information.</p>';
         }
         
         this.validateStep2();
     }
 
+    // Updated validation for Step 2
     validateStep2() {
-        const isValid = this.appData.llmProvider && 
-                       this.appData.llmModel && 
-                       this.appData.apiKey.length > 0;
+        const hasProvider = !!this.appData.llmProvider;
+        const hasModel = !!this.appData.llmModel;
+        const hasServerKey = this.serverKeys && this.serverKeys[this.appData.llmProvider];
+        const hasManualKey = this.appData.apiKey && this.appData.apiKey.length > 0;
+        
+        const isValid = hasProvider && hasModel && (hasServerKey || hasManualKey);
         document.getElementById('step-2-next').disabled = !isValid;
         return isValid;
     }
@@ -334,7 +386,12 @@ With strong market fundamentals, a proven business model, and an experienced tea
             formData.append('guidance', this.appData.guidance);
             formData.append('llmProvider', this.appData.llmProvider);
             formData.append('llmModel', this.appData.llmModel);
-            formData.append('apiKey', this.appData.apiKey);
+            
+            // Only send API key if it's not the server placeholder
+            if (this.appData.apiKey !== 'server-key') {
+                formData.append('apiKey', this.appData.apiKey);
+            }
+            
             formData.append('template', this.appData.templateFile);
 
             const response = await fetch('/api/generate-presentation', {
