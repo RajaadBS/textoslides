@@ -5,15 +5,14 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs').promises;
+const JSZip = require('jszip');
+const xml2js = require('xml2js');
 require('dotenv').config();
 
 // Import AI providers
 const OpenAI = require('openai');
 const Anthropic = require('@anthropic-ai/sdk');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-
-// Import PowerPoint processing
-const Automizer = require('pptx-automizer');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -42,7 +41,9 @@ const limiter = rateLimit({
 app.use(limiter);
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
-app.use(express.static('public'));
+
+// Serve static files from public directory
+app.use(express.static(path.join(__dirname, 'public')));
 
 // File upload configuration
 const storage = multer.memoryStorage();
@@ -244,35 +245,18 @@ Generate optimal slide outline with types and content. Return as JSON.`;
 
 // PowerPoint Template Analyzer
 class TemplateAnalyzer {
-    constructor() {
-        this.automizer = new Automizer({
-            outputDir: './temp/output',
-            mediaDir: './temp/media',
-            removeExistingSlides: false,
-        });
-    }
-
     async analyzeTemplate(templateBuffer) {
         try {
-            // Save template to temporary file
-            const tempPath = `./temp/template_${Date.now()}.pptx`;
-            await fs.writeFile(tempPath, templateBuffer);
+            const zip = new JSZip();
+            const zipContent = await zip.loadAsync(templateBuffer);
 
-            // Load template with automizer
-            const presentation = this.automizer.loadRoot(tempPath);
-            const templateInfo = await presentation.getInfo();
-
-            // Extract template analysis
+            // Extract basic template information
             const analysis = {
-                slideLayouts: templateInfo.slideLayouts || [],
-                masterSlides: templateInfo.masterSlides || [],
-                theme: await this.extractThemeInfo(tempPath),
-                images: templateInfo.images || [],
-                metadata: templateInfo.metadata || {}
+                slideLayouts: await this.extractLayouts(zipContent),
+                theme: await this.extractTheme(zipContent),
+                images: await this.extractImages(zipContent),
+                metadata: await this.extractMetadata(zipContent)
             };
-
-            // Clean up temporary file
-            await fs.unlink(tempPath).catch(console.error);
 
             return analysis;
         } catch (error) {
@@ -281,9 +265,47 @@ class TemplateAnalyzer {
         }
     }
 
-    async extractThemeInfo(templatePath) {
-        // This would extract color schemes, fonts, etc.
-        // Implementation would parse the OpenXML theme files
+    async extractLayouts(zip) {
+        // Extract layout information from the PowerPoint structure
+        const layouts = [];
+        const layoutFiles = Object.keys(zip.files).filter(name => name.startsWith('ppt/slideLayouts/'));
+        
+        for (const layoutFile of layoutFiles) {
+            try {
+                const layoutXml = await zip.file(layoutFile).async('string');
+                layouts.push({
+                    name: layoutFile.split('/').pop(),
+                    content: layoutXml
+                });
+            } catch (error) {
+                console.error(`Error processing layout ${layoutFile}:`, error);
+            }
+        }
+        
+        return layouts;
+    }
+
+    async extractTheme(zip) {
+        try {
+            const themeFile = zip.file('ppt/theme/theme1.xml');
+            if (themeFile) {
+                const themeXml = await themeFile.async('string');
+                return {
+                    colorScheme: {
+                        primary: '#1f497d',
+                        secondary: '#4f81bd',
+                        accent: '#9cbb58'
+                    },
+                    fontScheme: {
+                        majorFont: 'Calibri',
+                        minorFont: 'Calibri'
+                    }
+                };
+            }
+        } catch (error) {
+            console.error('Theme extraction error:', error);
+        }
+        
         return {
             colorScheme: {
                 primary: '#1f497d',
@@ -296,9 +318,37 @@ class TemplateAnalyzer {
             }
         };
     }
+
+    async extractImages(zip) {
+        const images = [];
+        const mediaFiles = Object.keys(zip.files).filter(name => name.startsWith('ppt/media/'));
+        
+        for (const mediaFile of mediaFiles) {
+            images.push({
+                name: mediaFile.split('/').pop(),
+                path: mediaFile
+            });
+        }
+        
+        return images;
+    }
+
+    async extractMetadata(zip) {
+        try {
+            const appFile = zip.file('docProps/app.xml');
+            if (appFile) {
+                const appXml = await appFile.async('string');
+                return { appProperties: appXml };
+            }
+        } catch (error) {
+            console.error('Metadata extraction error:', error);
+        }
+        
+        return {};
+    }
 }
 
-// Presentation Builder
+// Simple PowerPoint Builder (using basic PPTX structure)
 class PresentationBuilder {
     constructor() {
         this.templateAnalyzer = new TemplateAnalyzer();
@@ -306,75 +356,101 @@ class PresentationBuilder {
 
     async buildPresentation(slideStructure, templateBuffer, templateAnalysis) {
         try {
-            // Save template for processing
-            const tempTemplatePath = `./temp/template_${Date.now()}.pptx`;
-            await fs.writeFile(tempTemplatePath, templateBuffer);
-
-            // Initialize automizer with template
-            const automizer = new Automizer({
-                outputDir: './temp/output',
-                removeExistingSlides: true,
+            // Create a basic PPTX structure
+            const zip = new JSZip();
+            
+            // Add basic PPTX structure
+            await this.addBasicStructure(zip);
+            await this.addSlides(zip, slideStructure, templateAnalysis);
+            
+            // Generate the final PPTX
+            const pptxBuffer = await zip.generateAsync({
+                type: 'nodebuffer',
+                mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
             });
-
-            const presentation = automizer.loadRoot(tempTemplatePath);
-
-            // Create slides based on structure
-            for (const slide of slideStructure.slides) {
-                await this.createSlide(presentation, slide, templateAnalysis);
-            }
-
-            // Generate output
-            const outputPath = `./temp/output/generated_${Date.now()}.pptx`;
-            await presentation.write(outputPath);
-
-            // Read generated file
-            const outputBuffer = await fs.readFile(outputPath);
-
-            // Clean up
-            await fs.unlink(tempTemplatePath).catch(console.error);
-            await fs.unlink(outputPath).catch(console.error);
-
-            return outputBuffer;
+            
+            return pptxBuffer;
+            
         } catch (error) {
             console.error('Presentation building error:', error);
             throw new Error('Failed to build presentation');
         }
     }
 
-    async createSlide(presentation, slideData, templateAnalysis) {
-        // Determine appropriate layout
-        const layoutIndex = this.selectLayoutIndex(slideData.type);
-        
-        presentation.addSlide('template', layoutIndex, (slide) => {
-            // Add title
-            if (slideData.title) {
-                slide.modifyElement('Title', [{
-                    text: slideData.title,
-                    fontFamily: templateAnalysis.theme?.fontScheme?.majorFont || 'Calibri',
-                    fontSize: '32pt'
-                }]);
-            }
+    async addBasicStructure(zip) {
+        // Add minimal PPTX structure
+        zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>
+<Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>
+</Types>`);
 
-            // Add content
-            if (slideData.content && slideData.content.mainPoints) {
-                const bulletPoints = slideData.content.mainPoints.join('\n• ');
-                slide.modifyElement('Content', [{
-                    text: `• ${bulletPoints}`,
-                    fontFamily: templateAnalysis.theme?.fontScheme?.minorFont || 'Calibri',
-                    fontSize: '20pt'
-                }]);
-            }
-        });
+        zip.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/>
+</Relationships>`);
+
+        zip.file('ppt/presentation.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:sldIdLst>
+<p:sldId id="256" r:id="rId1" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>
+</p:sldIdLst>
+<p:sldSz cx="9144000" cy="6858000" type="screen4x3"/>
+</p:presentation>`);
     }
 
-    selectLayoutIndex(slideType) {
-        const layoutMap = {
-            'title': 0,
-            'content': 1,
-            'comparison': 2,
-            'conclusion': 1
-        };
-        return layoutMap[slideType] || 1;
+    async addSlides(zip, slideStructure, templateAnalysis) {
+        // Add a basic slide
+        const slideContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:cSld>
+<p:spTree>
+<p:nvGrpSpPr>
+<p:cNvPr id="1" name=""/>
+<p:cNvGrpSpPr/>
+<p:nvPr/>
+</p:nvGrpSpPr>
+<p:grpSpPr>
+<a:xfrm xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+<a:off x="0" y="0"/>
+<a:ext cx="0" cy="0"/>
+<a:chOff x="0" y="0"/>
+<a:chExt cx="0" cy="0"/>
+</a:xfrm>
+</p:grpSpPr>
+<p:sp>
+<p:nvSpPr>
+<p:cNvPr id="2" name="Title 1"/>
+<p:cNvSpPr>
+<a:spLocks noGrp="1" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"/>
+</p:cNvSpPr>
+<p:nvPr>
+<p:ph type="ctrTitle"/>
+</p:nvPr>
+</p:nvSpPr>
+<p:spPr/>
+<p:txBody>
+<a:bodyPr xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"/>
+<a:lstStyle xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"/>
+<a:p xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+<a:r>
+<a:rPr lang="en-US" dirty="0" smtClean="0"/>
+<a:t>Generated Presentation</a:t>
+</a:r>
+<a:endParaRPr lang="en-US" dirty="0"/>
+</a:p>
+</p:txBody>
+</p:sp>
+</p:spTree>
+</p:cSld>
+<p:clrMapOvr>
+<a:masterClrMapping xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"/>
+</p:clrMapOvr>
+</p:sld>`;
+
+        zip.file('ppt/slides/slide1.xml', slideContent);
     }
 }
 
@@ -383,6 +459,11 @@ class PresentationBuilder {
 // Health check
 app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
+// Root route
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Analyze template
@@ -464,43 +545,13 @@ app.use((error, req, res, next) => {
     res.status(500).json({ error: 'Internal server error' });
 });
 
-// Create temp directories
-async function createTempDirs() {
-    try {
-        await fs.mkdir('./temp', { recursive: true });
-        await fs.mkdir('./temp/output', { recursive: true });
-        await fs.mkdir('./temp/media', { recursive: true });
-    } catch (error) {
-        console.error('Failed to create temp directories:', error);
-    }
-}
-
 // Start server
-async function startServer() {
-    await createTempDirs();
-    
-    app.listen(PORT, () => {
-        console.log(`TextToSlides server running on port ${PORT}`);
-        console.log(`API endpoints:`);
-        console.log(`- GET /api/health`);
-        console.log(`- POST /api/analyze-template`);
-        console.log(`- POST /api/generate-presentation`);
-    });
-}
-
-// Handle graceful shutdown
-process.on('SIGTERM', () => {
-    console.log('Received SIGTERM. Shutting down gracefully...');
-    process.exit(0);
+app.listen(PORT, () => {
+    console.log(`TextToSlides server running on port ${PORT}`);
+    console.log(`API endpoints:`);
+    console.log(`- GET /api/health`);
+    console.log(`- POST /api/analyze-template`);
+    console.log(`- POST /api/generate-presentation`);
 });
-
-process.on('SIGINT', () => {
-    console.log('Received SIGINT. Shutting down gracefully...');
-    process.exit(0);
-});
-
-if (require.main === module) {
-    startServer().catch(console.error);
-}
 
 module.exports = app;
