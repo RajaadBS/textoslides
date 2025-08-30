@@ -28,16 +28,40 @@ const createTempDirs = () => {
 };
 createTempDirs();
 
-// Security middleware
+// Security middleware - Updated CSP to allow all necessary resources
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            styleSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://fonts.googleapis.com"],
-            scriptSrc: ["'self'", "https://cdn.jsdelivr.net"],
-            imgSrc: ["'self'", "data:", "https:", "blob:"],
-            fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdn.jsdelivr.net"],
-            connectSrc: ["'self'", "https://api.openai.com", "https://api.anthropic.com", "https://generativelanguage.googleapis.com"],
+            styleSrc: [
+                "'self'", 
+                "'unsafe-inline'", 
+                "https://cdn.jsdelivr.net", 
+                "https://fonts.googleapis.com",
+                "https://r2cdn.perplexity.ai"
+            ],
+            scriptSrc: [
+                "'self'", 
+                "https://cdn.jsdelivr.net"
+            ],
+            imgSrc: [
+                "'self'", 
+                "data:", 
+                "https:", 
+                "blob:"
+            ],
+            fontSrc: [
+                "'self'", 
+                "https://fonts.gstatic.com", 
+                "https://cdn.jsdelivr.net",
+                "https://r2cdn.perplexity.ai"
+            ],
+            connectSrc: [
+                "'self'", 
+                "https://api.openai.com", 
+                "https://api.anthropic.com", 
+                "https://generativelanguage.googleapis.com"
+            ],
         },
     },
 }));
